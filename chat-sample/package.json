@@ -2,7 +2,7 @@
     "name": "chat-sample",
     "publisher": "vscode-samples",
     "displayName": "Copilot Chat Sample",
-    "description": "Sample chat extension, a trusty cat tutor that will can teach you computer science topics.",
+    "description": "Sample chat extension that assists you with your monitoring.",
     "repository": {
         "type": "git",
         "url": "https://github.com/Microsoft/vscode-extension-samples"
@@ -24,28 +24,36 @@
         "languageModels"
     ],
     "contributes": {
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "chat-sample.insertSuggestedCodeChanges",
+                    "when": "false"
+                }
+            ]
+        },
         "chatParticipants": [
             {
-				"id": "chat-sample.cat",
-                "name": "cat",
-                "description": "Meow! What can I teach you?",
+				"id": "chat-sample.nala",
+                "name": "nala",
+                "description": "Hello, my name is Nala! What code can I help you with today?",
                 "isSticky": true,
                 "commands": [
                     {
-                        "name": "teach",
-                        "description": "Pick at random a computer science concept then explain it in purfect way of a cat"
+                        "name": "remediate",
+                        "description": "Please examine and remediate any problems in the code."
                     },
                     {
-                        "name": "play",
-                        "description": "Do whatever you want, you are a cat after all"
+                        "name": "optimize",
+                        "description": "Please examine my code and optimize the code for performance."
                     }
                 ]
             }
         ],
         "commands": [
             {
-                "command": "cat.namesInEditor",
-                "title": "Use Cat Names in Editor"
+                "command": "chat-sample.insertSuggestedCodeChanges",
+                "title": "Insert Suggested Code Changes"
             }
         ]
     },

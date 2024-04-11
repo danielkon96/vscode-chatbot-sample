@@ -1,20 +1,20 @@
 import * as vscode from 'vscode';
 
-const CAT_NAMES_COMMAND_ID = 'cat.namesInEditor';
-const CAT_PARTICIPANT_ID = 'chat-sample.cat';
+const LANGUAGE_MODEL_ID = 'copilot-gpt-3.5-turbo'; // Use faster model. Alternative is 'copilot-gpt-4', which is slower but more powerful
 
-interface ICatChatResult extends vscode.ChatResult {
+const CAT_PARTICIPANT_ID = 'chat-sample.nala';
+const CAT_NAMES_COMMAND_ID = 'chat-sample.insertSuggestedCodeChanges';
+
+interface INalaChatResult extends vscode.ChatResult {
     metadata: {
-        command: string;
+        codeSuggestion: string;
     }
 }
 
-const LANGUAGE_MODEL_ID = 'copilot-gpt-3.5-turbo'; // Use faster model. Alternative is 'copilot-gpt-4', which is slower but more powerful
-
 export function activate(context: vscode.ExtensionContext) {
 
-    // Define a Cat chat handler. 
-    const handler: vscode.ChatRequestHandler = async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<ICatChatResult> => {
+    // Define a chat handler. 
+    const handler: vscode.ChatRequestHandler = async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<INalaChatResult> => {
         // To talk to an LLM in your subcommand handler implementation, your
         // extension can use VS Code's `requestChatAccess` API to access the Copilot API.
         // The GitHub Copilot Chat extension implements this provider.
@@ -31,27 +31,50 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             stream.button({
+                title: vscode.l10n.t('Use Cat Names in Editor'),
                 command: CAT_NAMES_COMMAND_ID,
-                title: vscode.l10n.t('Use Cat Names in Editor')
+                arguments: [{ metadata: { codeSuggestion: 'teach' } }]
             });
 
-            return { metadata: { command: 'teach' } };
-        } else if (request.command == 'play') {
+            return { metadata: { codeSuggestion: 'teach' } };
+        } else if (request.command == 'remediate') {
             stream.progress('Throwing away the computer science books and preparing to play with some Python code...');
             const messages = [
-                new vscode.LanguageModelChatSystemMessage('You are a cat! Reply in the voice of a cat, using cat analogies when appropriate. Be concise to prepare for cat play time.'),
-                new vscode.LanguageModelChatUserMessage('Give a small random python code samples (that have cat names for variables). ' + request.prompt)
+                new vscode.LanguageModelChatSystemMessage(
+                    '```' +
+                    '\n- You are a programming expert who suggested code remediation steps to any problems you see! Please examine the code and any additional details from the user and report back if you see any problems with it.' +
+                    '\n- If you recommend any code changes, recommend the whole text file with your changes.' +
+                    '\n- Only display one codeblock with your code changes' +
+                    '\n- Anything in the text file you did not change, you must leave the same.' +
+                    '\n- Any changes you make, please discuss them after the codeblock.' +
+                    '```'
+                ),
+                new vscode.LanguageModelChatUserMessage(request.prompt + vscode.window.activeTextEditor?.document.getText())
             ];
+
+            // fragment is just line by line code
+            let chatResponseString = '';
             const chatResponse = await vscode.lm.sendChatRequest(LANGUAGE_MODEL_ID, messages, {}, token);
             for await (const fragment of chatResponse.stream) {
                 stream.markdown(fragment);
+                chatResponseString += fragment;
             }
-            return { metadata: { command: 'play' } };
+            let startIdx = chatResponseString.indexOf("```") + 3; // Find the index of the first occurrence of "```" and add 3 to skip past it
+            let endIdx = chatResponseString.lastIndexOf("```"); // Find the index of the last occurrence of "```"
+            let suggestedCode = chatResponseString.substring(startIdx, endIdx);
+
+            // IF THERE ARE NO PROBLEMS, SHOW THIS BUTTON
+            stream.button({
+                title: vscode.l10n.t('Insert the suggested code changes into editor'),
+                command: CAT_NAMES_COMMAND_ID,
+                arguments: [{ metadata: { codeSuggestion: suggestedCode } }]
+            });
+            return { metadata: { codeSuggestion: 'play' } };
         } else {
             const messages = [
                 new vscode.LanguageModelChatSystemMessage(`You are a cat! Think carefully and step by step like a cat would.
                     Your job is to explain computer science concepts in the funny manner of a cat, using cat metaphors. Always start your response by stating what concept you are explaining. Always include code samples.`),
-                new vscode.LanguageModelChatUserMessage(request.prompt)
+                    new vscode.LanguageModelChatUserMessage(request.prompt + request.variables[0].values[0].value)
             ];
             const chatResponse = await vscode.lm.sendChatRequest(LANGUAGE_MODEL_ID, messages, {}, token);
             for await (const fragment of chatResponse.stream) {
@@ -61,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
                 stream.markdown(catFragment);
             }
 
-            return { metadata: { command: '' } };
+            return { metadata: { codeSuggestion: '' } };
         }
     };
 
@@ -71,10 +94,10 @@ export function activate(context: vscode.ExtensionContext) {
     const cat = vscode.chat.createChatParticipant(CAT_PARTICIPANT_ID, handler);
     cat.iconPath = vscode.Uri.joinPath(context.extensionUri, 'cat.jpeg');
     cat.followupProvider = {
-        provideFollowups(result: ICatChatResult, context: vscode.ChatContext, token: vscode.CancellationToken) {
+        provideFollowups(result: INalaChatResult, context: vscode.ChatContext, token: vscode.CancellationToken) {
             return [{
-                prompt: 'let us play',
-                label: vscode.l10n.t('Play with the cat'),
+                prompt: 'HELLO FOLLOW UP',
+                label: vscode.l10n.t('HELLO FOLLOW UP'),
                 command: 'play'
             } satisfies vscode.ChatFollowup];
         }
@@ -102,57 +125,62 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    context.subscriptions.push(vscode.commands.registerCommand('cat.testCommand', async () => {
+        cat.sampleRequest
+    }));
+
     context.subscriptions.push(
         cat,
-        // Register the command handler for the /meow followup
-        vscode.commands.registerTextEditorCommand(CAT_NAMES_COMMAND_ID, async (textEditor: vscode.TextEditor) => {
+        // Register the command handler to insert desired code changes into the editor
+        vscode.commands.registerTextEditorCommand(CAT_NAMES_COMMAND_ID, async (textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit, nalaChatResult: INalaChatResult) => {
             // Replace all variables in active editor with cat names and words
-            const text = textEditor.document.getText();
-            const messages = [
-                new vscode.LanguageModelChatSystemMessage(`You are a cat! Think carefully and step by step like a cat would.
-                Your job is to replace all variable names in the following code with funny cat variable names. Be creative. IMPORTANT respond just with code. Do not use markdown!`),
-                new vscode.LanguageModelChatUserMessage(text)
-            ];
+            // const text = textEditor.document.getText();
+            // const messages = [
+            //     new vscode.LanguageModelChatSystemMessage(`You are a cat! Think carefully and step by step like a cat would.
+            //     Your job is to replace all variable names in the following code with funny cat variable names. Be creative. IMPORTANT respond just with code. Do not use markdown!`),
+            //     new vscode.LanguageModelChatUserMessage(text)
+            // ];
 
-            let chatResponse: vscode.LanguageModelChatResponse | undefined;
-            try {
-                chatResponse = await vscode.lm.sendChatRequest(LANGUAGE_MODEL_ID, messages, {}, new vscode.CancellationTokenSource().token);
+            // let chatResponse: vscode.LanguageModelChatResponse | undefined;
+            // try {
+            //     chatResponse = await vscode.lm.sendChatRequest(LANGUAGE_MODEL_ID, messages, {}, new vscode.CancellationTokenSource().token);
 
-            } catch (err) {
-                // making the chat request might fail because
-                // - model does not exist
-                // - user consent not given
-                // - quote limits exceeded
-                if (err instanceof vscode.LanguageModelError) {
-                    console.log(err.message, err.code, err.cause)
-                }
-                return
-            }
+            // } catch (err) {
+            //     // making the chat request might fail because
+            //     // - model does not exist
+            //     // - user consent not given
+            //     // - quote limits exceeded
+            //     if (err instanceof vscode.LanguageModelError) {
+            //         console.log(err.message, err.code, err.cause)
+            //     }
+            //     return
+            // }
 
-            // Clear the editor content before inserting new content
+            // Clear the editor content and insert new content
             await textEditor.edit(edit => {
                 const start = new vscode.Position(0, 0);
                 const end = new vscode.Position(textEditor.document.lineCount - 1, textEditor.document.lineAt(textEditor.document.lineCount - 1).text.length);
                 edit.delete(new vscode.Range(start, end));
+                edit.insert(start, nalaChatResult.metadata.codeSuggestion);
             });
 
-            // Stream the code into the editor as it is coming in from the Language Model
-            try {
-                for await (const fragment of chatResponse.stream) {
-                    await textEditor.edit(edit => {
-                        const lastLine = textEditor.document.lineAt(textEditor.document.lineCount - 1);
-                        const position = new vscode.Position(lastLine.lineNumber, lastLine.text.length);
-                        edit.insert(position, fragment);
-                    });
-                }
-            } catch (err) {
-                // async response stream may fail, e.g network interruption or server side error
-                await textEditor.edit(edit => {
-                    const lastLine = textEditor.document.lineAt(textEditor.document.lineCount - 1);
-                    const position = new vscode.Position(lastLine.lineNumber, lastLine.text.length);
-                    edit.insert(position, (<Error>err).message);
-                });
-            }
+            // // Stream the code into the editor as it is coming in from the Language Model
+            // try {
+            //     for await (const fragment of chatResponse.stream) {
+            //         await textEditor.edit(edit => {
+            //             const lastLine = textEditor.document.lineAt(textEditor.document.lineCount - 1);
+            //             const position = new vscode.Position(lastLine.lineNumber, lastLine.text.length);
+            //             edit.insert(position, fragment);
+            //         });
+            //     }
+            // } catch (err) {
+            //     // async response stream may fail, e.g network interruption or server side error
+            //     await textEditor.edit(edit => {
+            //         const lastLine = textEditor.document.lineAt(textEditor.document.lineCount - 1);
+            //         const position = new vscode.Position(lastLine.lineNumber, lastLine.text.length);
+            //         edit.insert(position, (<Error>err).message);
+            //     });
+            // }
         }),
     );
 }
