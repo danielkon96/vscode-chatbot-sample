@@ -4,6 +4,7 @@ const LANGUAGE_MODEL_ID = 'copilot-gpt-3.5-turbo'; // Use faster model. Alternat
 
 const CAT_PARTICIPANT_ID = 'chat-sample.nala';
 const CAT_NAMES_COMMAND_ID = 'chat-sample.insertSuggestedCodeChanges';
+const CAT_OBSERVE_COMMAND_ID = 'chat-sample.observeCommand';
 
 interface INalaChatResult extends vscode.ChatResult {
     metadata: {
@@ -11,7 +12,34 @@ interface INalaChatResult extends vscode.ChatResult {
     }
 }
 
+let timeout: NodeJS.Timeout | undefined;
 export function activate(context: vscode.ExtensionContext) {
+    // // Function to update the sidebar based on the entire document
+    // function updateSidebar(document: string) {
+    //     // Logic to examine the entire document and update the sidebar UI
+    //     console.log(document.substring(document.length - 200, document.length));
+    // }
+
+    // // Register a command that will be triggered when the extension is activated
+    // context.subscriptions.push(vscode.commands.registerTextEditorCommand(CAT_OBSERVE_COMMAND_ID, (textEditor) => {
+    //     // Subscribe to text change events
+    //     const disposable = vscode.workspace.onDidChangeTextDocument((event) => {
+    //         // Check if the change occurred in the active text editor
+    //         if (textEditor && event.document === textEditor.document) {
+    //             clearTimeout(timeout);
+    //             // Start a new typing timeout
+    //             timeout= setTimeout(() => {
+    //                 // Perform your logic here, such as analyzing the text
+    //                 updateSidebar(textEditor.document.getText());
+    //             }, 5000);
+    //         }
+    //     });
+
+    //     // Initial update of the sidebar when the command is executed
+    //     updateSidebar(textEditor.document.getText());
+    // }));
+
+    // vscode.commands.executeCommand(CAT_OBSERVE_COMMAND_ID, vscode.window.activeTextEditor);
 
     // Define a chat handler. 
     const handler: vscode.ChatRequestHandler = async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<INalaChatResult> => {
@@ -38,7 +66,30 @@ export function activate(context: vscode.ExtensionContext) {
 
             return { metadata: { codeSuggestion: 'teach' } };
         } else if (request.command == 'remediate') {
-            stream.progress('Throwing away the computer science books and preparing to play with some Python code...');
+            stream.progress('I am reviewing your code...');
+            
+            
+            // This would be the way to get all files in vscode, not just the ones in the editor.
+            // Get all files in the workspace using a glob pattern
+            // const files = await vscode.workspace.findFiles('**/*');
+
+            // // Iterate over each file
+            // for (const file of files) {
+            //     // Read the content of the file
+            //     const content = await vscode.workspace.fs.readFile(file);
+                
+            //     // Log file path and content
+            //     // console.log('File name:', file.fsPath);
+            //     // console.log('Content:', content.toString());
+            // }
+
+            // THIS IS THE WAY TO GET ALL FILES OPEN IN THE EDITOR, NOT JUST ACTIVE.
+            // const workspacedocs = vscode.workspace.textDocuments;
+            // workspacedocs.forEach(document => {
+            //     console.log('File name:', document.fileName);
+            //     console.log('Content:', document.getText());
+            // });
+
             const messages = [
                 new vscode.LanguageModelChatSystemMessage(
                     '```' +
@@ -46,6 +97,8 @@ export function activate(context: vscode.ExtensionContext) {
                     '\n- If you recommend any code changes, recommend the whole text file with your changes.' +
                     '\n- Only display one codeblock with your code changes' +
                     '\n- Anything in the text file you did not change, you must leave the same.' +
+                    '\n- Review all other files passed in the prompt and make sure your changes wont effect the rest of the system. ' +
+                    '\n- Use any additional context the user provides you to guide your solution. ' +
                     '\n- Any changes you make, please discuss them after the codeblock.' +
                     '```'
                 ),

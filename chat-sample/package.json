@@ -54,6 +54,10 @@
             {
                 "command": "chat-sample.insertSuggestedCodeChanges",
                 "title": "Insert Suggested Code Changes"
+            },
+            {
+                "command": "chat-sample.observeCommand",
+                "title": "Observe Code Changes"
             }
         ]
     },
